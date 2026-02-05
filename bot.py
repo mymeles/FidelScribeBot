@@ -9,6 +9,7 @@ import logging
 import os
 import random
 import asyncio
+from datetime import datetime
 from typing import Optional
 
 import httpx
@@ -45,6 +46,10 @@ MAX_AUDIO_DURATION_SECONDS = 60
 MAX_RETRIES = 3
 BASE_DELAY = 1  # seconds
 
+# History configuration
+MAX_HISTORY_ITEMS = 10  # Maximum number of transcriptions to store per user
+PREVIEW_LENGTH = 50  # Characters to show in history preview
+
 # Language configurations
 LANGUAGES = {
     "am": {
@@ -77,7 +82,11 @@ STRINGS = {
             "1. የድምጽ መልእክት ይላኩ\n"
             "2. ወይም የድምጽ ፋይል ይላኩ\n"
             "3. ግልባጩን ይጠብቁ\n\n"
-            "🗣️ /language - ቋንቋ ይቀይሩ\n\n"
+            "*📋 ትዕዛዞች:*\n"
+            "🗣️ /language - ቋንቋ ይቀይሩ\n"
+            "⚙️ /menu - ምናሌ ክፈት\n"
+            "📜 /history - የቅርብ ጊዜ ግልባጮች\n"
+            "📊 /settings - ቅንብሮቼን ይመልከቱ\n\n"
             "⚠️ *ምክሮች:*\n"
             "• ለተሻለ ውጤት በግልጽ ይናገሩ\n"
             "• የጀርባ ድምጽን ይቀንሱ\n"
@@ -94,6 +103,27 @@ STRINGS = {
         "error_no_audio": "❌ እባክዎ የድምጽ መልእክት ወይም የድምጽ ፋይል ይላኩ።",
         "error_file_too_large": "❌ ፋይሉ በጣም ትልቅ ነው ({size}MB)። ከፍተኛው መጠን {max}MB ነው።",
         "warning_long_audio": "⚠️ ድምጽ {duration} ሰከንድ ነው። ለተሻለ ውጤት ከ{max} ሰከንድ በታች ያድርጉ።\nቢሆንም በማስኬድ ላይ...",
+        # Menu strings
+        "menu_title": "⚙️ *ምናሌ*\n\nከዚህ በታች ያሉትን አማራጮች ይምረጡ:",
+        "menu_language": "🌍 ቋንቋ ቀይር",
+        "menu_settings": "📊 ቅንብሮቼ",
+        "menu_help": "❓ እርዳታ",
+        "menu_history": "📜 ታሪክ",
+        "menu_back": "◀️ ተመለስ",
+        "menu_close": "✖️ ዝጋ",
+        # Settings strings
+        "settings_title": "📊 *የእርስዎ ቅንብሮች*\n\n",
+        "settings_language": "🌍 *ቋንቋ:* {language}\n",
+        "settings_transcriptions": "📝 *ጠቅላላ ግልባጮች:* {count}\n",
+        "settings_since": "📅 *ከ:* {date}",
+        # History strings
+        "history_title": "📜 *የቅርብ ጊዜ ግልባጮች*\n\n",
+        "history_empty": "📭 ገና ምንም ግልባጭ የለዎትም።\n\nድምጽ ይላኩልኝ እና እኔ ወደ ጽሑፍ እቀይረዋለሁ!",
+        "history_item": "*{num}.* {date}\n_{preview}_\n\n",
+        "history_view": "👁️ ሙሉ ይመልከቱ #{num}",
+        "history_full": "📜 *ግልባጭ #{num}*\n📅 {date}\n\n{text}",
+        "history_no_item": "❌ ይህ ግልባጭ አልተገኘም።",
+        "menu_opened": "📋 ምናሌ ተከፍቷል",
     },
     "en": {
         "welcome": (
@@ -109,7 +139,11 @@ STRINGS = {
             "1. Send a voice message\n"
             "2. Or send an audio file\n"
             "3. Wait for the transcription\n\n"
-            "🗣️ /language - Change language\n\n"
+            "*📋 Commands:*\n"
+            "🗣️ /language - Change language\n"
+            "⚙️ /menu - Open menu\n"
+            "📜 /history - Recent transcriptions\n"
+            "📊 /settings - View your settings\n\n"
             "⚠️ *Tips:*\n"
             "• Speak clearly for better results\n"
             "• Minimize background noise\n"
@@ -126,6 +160,27 @@ STRINGS = {
         "error_no_audio": "❌ Please send a voice message or audio file.",
         "error_file_too_large": "❌ File too large ({size}MB). Maximum size is {max}MB.",
         "warning_long_audio": "⚠️ Audio is {duration}s long. For best results, keep it under {max}s.\nProcessing anyway...",
+        # Menu strings
+        "menu_title": "⚙️ *Menu*\n\nSelect an option below:",
+        "menu_language": "🌍 Change Language",
+        "menu_settings": "📊 My Settings",
+        "menu_help": "❓ Help",
+        "menu_history": "📜 History",
+        "menu_back": "◀️ Back",
+        "menu_close": "✖️ Close",
+        # Settings strings
+        "settings_title": "📊 *Your Settings*\n\n",
+        "settings_language": "🌍 *Language:* {language}\n",
+        "settings_transcriptions": "📝 *Total transcriptions:* {count}\n",
+        "settings_since": "📅 *Since:* {date}",
+        # History strings
+        "history_title": "📜 *Recent Transcriptions*\n\n",
+        "history_empty": "📭 You don't have any transcriptions yet.\n\nSend me audio and I'll transcribe it for you!",
+        "history_item": "*{num}.* {date}\n_{preview}_\n\n",
+        "history_view": "👁️ View Full #{num}",
+        "history_full": "📜 *Transcription #{num}*\n📅 {date}\n\n{text}",
+        "history_no_item": "❌ This transcription was not found.",
+        "menu_opened": "📋 Menu opened",
     },
 }
 
@@ -144,6 +199,65 @@ def get_string(key: str, context: ContextTypes.DEFAULT_TYPE, **kwargs) -> str:
     if kwargs:
         text = text.format(**kwargs)
     return text
+
+
+def add_to_history(context: ContextTypes.DEFAULT_TYPE, transcription: str) -> None:
+    """Add a transcription to user's history."""
+    if "history" not in context.user_data:
+        context.user_data["history"] = []
+        context.user_data["first_use"] = datetime.now().strftime("%Y-%m-%d")
+
+    # Add new transcription at the beginning
+    context.user_data["history"].insert(0, {
+        "text": transcription,
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    })
+
+    # Keep only the most recent items
+    if len(context.user_data["history"]) > MAX_HISTORY_ITEMS:
+        context.user_data["history"] = context.user_data["history"][:MAX_HISTORY_ITEMS]
+
+    # Increment total count
+    context.user_data["total_transcriptions"] = context.user_data.get("total_transcriptions", 0) + 1
+
+
+def get_history(context: ContextTypes.DEFAULT_TYPE) -> list:
+    """Get user's transcription history."""
+    return context.user_data.get("history", [])
+
+
+def create_menu_keyboard(context: ContextTypes.DEFAULT_TYPE) -> InlineKeyboardMarkup:
+    """Create the main menu inline keyboard."""
+    keyboard = [
+        [
+            InlineKeyboardButton(get_string("menu_language", context), callback_data="menu_language"),
+            InlineKeyboardButton(get_string("menu_settings", context), callback_data="menu_settings"),
+        ],
+        [
+            InlineKeyboardButton(get_string("menu_history", context), callback_data="menu_history"),
+            InlineKeyboardButton(get_string("menu_help", context), callback_data="menu_help"),
+        ],
+        [
+            InlineKeyboardButton(get_string("menu_close", context), callback_data="menu_close"),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def create_history_keyboard(context: ContextTypes.DEFAULT_TYPE, history: list) -> InlineKeyboardMarkup:
+    """Create keyboard with history item buttons."""
+    keyboard = []
+    for i, item in enumerate(history[:5], 1):  # Show max 5 items with view buttons
+        keyboard.append([
+            InlineKeyboardButton(
+                get_string("history_view", context, num=i),
+                callback_data=f"history_view_{i}"
+            )
+        ])
+    keyboard.append([
+        InlineKeyboardButton(get_string("menu_back", context), callback_data="menu_back")
+    ])
+    return InlineKeyboardMarkup(keyboard)
 
 
 async def exponential_backoff_retry(
@@ -249,6 +363,62 @@ async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
 
+async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /menu command - show persistent options menu."""
+    await update.message.reply_text(
+        get_string("menu_title", context),
+        reply_markup=create_menu_keyboard(context),
+        parse_mode="Markdown"
+    )
+
+
+async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /history command - show recent transcriptions."""
+    history = get_history(context)
+
+    if not history:
+        await update.message.reply_text(
+            get_string("history_empty", context),
+            parse_mode="Markdown"
+        )
+        return
+
+    # Build history display
+    history_text = get_string("history_title", context)
+    for i, item in enumerate(history[:5], 1):  # Show max 5 items
+        preview = item["text"][:PREVIEW_LENGTH]
+        if len(item["text"]) > PREVIEW_LENGTH:
+            preview += "..."
+        history_text += get_string("history_item", context, num=i, date=item["date"], preview=preview)
+
+    await update.message.reply_text(
+        history_text,
+        reply_markup=create_history_keyboard(context, history),
+        parse_mode="Markdown"
+    )
+
+
+async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /settings command - show user settings."""
+    lang = get_user_language(context)
+    lang_display = f"{LANGUAGES[lang]['flag']} {LANGUAGES[lang]['name_native']}"
+    total = context.user_data.get("total_transcriptions", 0)
+    first_use = context.user_data.get("first_use", datetime.now().strftime("%Y-%m-%d"))
+
+    settings_text = get_string("settings_title", context)
+    settings_text += get_string("settings_language", context, language=lang_display)
+    settings_text += get_string("settings_transcriptions", context, count=total)
+    settings_text += get_string("settings_since", context, date=first_use)
+
+    keyboard = [[InlineKeyboardButton(get_string("menu_back", context), callback_data="menu_main")]]
+
+    await update.message.reply_text(
+        settings_text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+
 async def handle_language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle language selection callback."""
     query = update.callback_query
@@ -262,6 +432,137 @@ async def handle_language_callback(update: Update, context: ContextTypes.DEFAULT
     await query.edit_message_text(get_string("language_set", context))
     await query.message.reply_text(
         get_string("welcome", context),
+        parse_mode="Markdown"
+    )
+
+
+async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle menu-related callbacks."""
+    query = update.callback_query
+    await query.answer()
+
+    action = query.data
+
+    if action == "menu_language":
+        # Show language selection
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    f"{LANGUAGES['am']['flag']} {LANGUAGES['am']['name_native']}",
+                    callback_data="lang_am"
+                ),
+                InlineKeyboardButton(
+                    f"{LANGUAGES['en']['flag']} {LANGUAGES['en']['name_native']}",
+                    callback_data="lang_en"
+                ),
+            ],
+            [InlineKeyboardButton(get_string("menu_back", context), callback_data="menu_back")]
+        ]
+        await query.edit_message_text(
+            get_string("choose_language", context),
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif action == "menu_settings":
+        # Show user settings
+        lang = get_user_language(context)
+        lang_display = f"{LANGUAGES[lang]['flag']} {LANGUAGES[lang]['name_native']}"
+        total = context.user_data.get("total_transcriptions", 0)
+        first_use = context.user_data.get("first_use", datetime.now().strftime("%Y-%m-%d"))
+
+        settings_text = get_string("settings_title", context)
+        settings_text += get_string("settings_language", context, language=lang_display)
+        settings_text += get_string("settings_transcriptions", context, count=total)
+        settings_text += get_string("settings_since", context, date=first_use)
+
+        keyboard = [[InlineKeyboardButton(get_string("menu_back", context), callback_data="menu_back")]]
+        await query.edit_message_text(
+            settings_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+
+    elif action == "menu_history":
+        # Show history
+        history = get_history(context)
+
+        if not history:
+            keyboard = [[InlineKeyboardButton(get_string("menu_back", context), callback_data="menu_back")]]
+            await query.edit_message_text(
+                get_string("history_empty", context),
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown"
+            )
+            return
+
+        history_text = get_string("history_title", context)
+        for i, item in enumerate(history[:5], 1):
+            preview = item["text"][:PREVIEW_LENGTH]
+            if len(item["text"]) > PREVIEW_LENGTH:
+                preview += "..."
+            history_text += get_string("history_item", context, num=i, date=item["date"], preview=preview)
+
+        await query.edit_message_text(
+            history_text,
+            reply_markup=create_history_keyboard(context, history),
+            parse_mode="Markdown"
+        )
+
+    elif action == "menu_help":
+        # Show help
+        keyboard = [[InlineKeyboardButton(get_string("menu_back", context), callback_data="menu_back")]]
+        await query.edit_message_text(
+            get_string("help", context),
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+
+    elif action in ("menu_back", "menu_main"):
+        # Go back to main menu
+        await query.edit_message_text(
+            get_string("menu_title", context),
+            reply_markup=create_menu_keyboard(context),
+            parse_mode="Markdown"
+        )
+
+    elif action == "menu_close":
+        # Close the menu
+        await query.delete_message()
+
+
+async def handle_history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle history view callbacks."""
+    query = update.callback_query
+    await query.answer()
+
+    # Extract history item number from callback data (history_view_1, history_view_2, etc.)
+    try:
+        item_num = int(query.data.replace("history_view_", ""))
+    except ValueError:
+        return
+
+    history = get_history(context)
+
+    if item_num < 1 or item_num > len(history):
+        keyboard = [[InlineKeyboardButton(get_string("menu_back", context), callback_data="menu_history")]]
+        await query.edit_message_text(
+            get_string("history_no_item", context),
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+    item = history[item_num - 1]
+    full_text = get_string(
+        "history_full", context,
+        num=item_num,
+        date=item["date"],
+        text=item["text"]
+    )
+
+    keyboard = [[InlineKeyboardButton(get_string("menu_back", context), callback_data="menu_history")]]
+    await query.edit_message_text(
+        full_text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
 
@@ -335,6 +636,9 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if result.get("success"):
             transcription = result.get("data", {}).get("transcription", "")
             if transcription:
+                # Save to history
+                add_to_history(context, transcription)
+
                 # Create inline keyboard with action buttons
                 keyboard = create_transcription_keyboard(transcription, context)
                 # Send as plain text with buttons
@@ -377,12 +681,22 @@ def main() -> None:
         .build()
     )
 
-    # Add handlers
+    # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("language", language_command))
+    application.add_handler(CommandHandler("menu", menu_command))
+    application.add_handler(CommandHandler("options", menu_command))  # Alias for /menu
+    application.add_handler(CommandHandler("history", history_command))
+    application.add_handler(CommandHandler("settings", settings_command))
+
+    # Add message handlers
     application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_audio))
+
+    # Add callback query handlers
     application.add_handler(CallbackQueryHandler(handle_language_callback, pattern="^lang_"))
+    application.add_handler(CallbackQueryHandler(handle_menu_callback, pattern="^menu_"))
+    application.add_handler(CallbackQueryHandler(handle_history_callback, pattern="^history_view_"))
 
     # Run the bot in polling mode
     logger.info("Starting bot in polling mode...")
