@@ -273,32 +273,14 @@ def create_transcription_keyboard(transcription: str, context: ContextTypes.DEFA
     youtube_url = f"https://www.youtube.com/results?search_query={query_text}"
     google_url = f"https://www.google.com/search?q={query_text}"
 
-    # Clean, minimal buttons with recognizable icons
+    # Clean, minimal buttons - just search options
     keyboard = [
         [
-            InlineKeyboardButton("📝", callback_data="text"),  # Get plain text
-            InlineKeyboardButton("🔍", url=google_url),        # Google search
-            InlineKeyboardButton("🎬", url=youtube_url),       # YouTube search
+            InlineKeyboardButton("🔍", url=google_url),   # Google search
+            InlineKeyboardButton("🎬", url=youtube_url),  # YouTube search
         ],
     ]
     return InlineKeyboardMarkup(keyboard)
-
-
-async def handle_text_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle the text button callback - send transcription as plain text."""
-    query = update.callback_query
-    await query.answer()
-
-    # Extract transcription from the original message
-    original_text = query.message.text
-    # Remove the header prefix (works for both languages)
-    if "\n\n" in original_text:
-        transcription = original_text.split("\n\n", 1)[1].strip()
-    else:
-        transcription = original_text
-
-    # Send as plain text - easy to copy or forward
-    await query.message.reply_text(transcription)
 
 
 async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -355,9 +337,9 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             if transcription:
                 # Create inline keyboard with action buttons
                 keyboard = create_transcription_keyboard(transcription, context)
+                # Send as plain text with buttons
                 await processing_msg.edit_text(
-                    f"{get_string('transcription_success', context)}{transcription}",
-                    parse_mode="Markdown",
+                    transcription,
                     reply_markup=keyboard
                 )
             else:
@@ -401,7 +383,6 @@ def main() -> None:
     application.add_handler(CommandHandler("language", language_command))
     application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_audio))
     application.add_handler(CallbackQueryHandler(handle_language_callback, pattern="^lang_"))
-    application.add_handler(CallbackQueryHandler(handle_text_callback, pattern="^text$"))
 
     # Run the bot in polling mode
     logger.info("Starting bot in polling mode...")
