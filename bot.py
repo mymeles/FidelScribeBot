@@ -13,9 +13,12 @@ from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
-from telegram import Update
+from urllib.parse import quote_plus
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -129,6 +132,50 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(help_message, parse_mode="Markdown")
 
 
+def create_transcription_keyboard(transcription: str) -> InlineKeyboardMarkup:
+    """Create inline keyboard with share, YouTube search, and copy buttons."""
+    # URL-encode the transcription for YouTube search
+    youtube_query = quote_plus(transcription[:100])  # Limit query length
+    youtube_url = f"https://www.youtube.com/results?search_query={youtube_query}"
+
+    # Create share text for the switch_inline_query
+    share_text = transcription[:200] if len(transcription) > 200 else transcription
+
+    keyboard = [
+        [
+            # Share button - opens chat selector to share the text
+            InlineKeyboardButton("📤 Share", switch_inline_query=share_text),
+            # YouTube search button - opens YouTube with search
+            InlineKeyboardButton("🎬 YouTube", url=youtube_url),
+        ],
+        [
+            # Copy button - shows text in a way user can copy
+            InlineKeyboardButton("📋 Copy Text", callback_data="copy"),
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+async def handle_copy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the copy button callback - send transcription as plain text for easy copying."""
+    query = update.callback_query
+    await query.answer()
+
+    # Extract transcription from the original message
+    original_text = query.message.text
+    # Remove the "✅ Transcription:\n\n" prefix
+    if "Transcription:" in original_text:
+        transcription = original_text.split("Transcription:", 1)[1].strip()
+    else:
+        transcription = original_text
+
+    # Send as a new message without formatting for easy copying
+    await query.message.reply_text(
+        f"📋 *Copy the text below:*\n\n`{transcription}`",
+        parse_mode="Markdown"
+    )
+
+
 async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle incoming audio messages (voice messages and audio files)."""
     message = update.message
@@ -178,9 +225,12 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if result.get("success"):
             transcription = result.get("data", {}).get("transcription", "")
             if transcription:
+                # Create inline keyboard with action buttons
+                keyboard = create_transcription_keyboard(transcription)
                 await processing_msg.edit_text(
                     f"✅ *Transcription:*\n\n{transcription}",
-                    parse_mode="Markdown"
+                    parse_mode="Markdown",
+                    reply_markup=keyboard
                 )
             else:
                 await processing_msg.edit_text(
@@ -228,6 +278,7 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_audio))
+    application.add_handler(CallbackQueryHandler(handle_copy_callback, pattern="^copy$"))
 
     # Run the bot in polling mode
     logger.info("Starting bot in polling mode...")
