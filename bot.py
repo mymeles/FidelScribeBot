@@ -94,11 +94,6 @@ STRINGS = {
         "error_no_audio": "❌ እባክዎ የድምጽ መልእክት ወይም የድምጽ ፋይል ይላኩ።",
         "error_file_too_large": "❌ ፋይሉ በጣም ትልቅ ነው ({size}MB)። ከፍተኛው መጠን {max}MB ነው።",
         "warning_long_audio": "⚠️ ድምጽ {duration} ሰከንድ ነው። ለተሻለ ውጤት ከ{max} ሰከንድ በታች ያድርጉ።\nቢሆንም በማስኬድ ላይ...",
-        "copy_text": "📋 *ከዚህ በታች ያለውን ጽሑፍ ይቅዱ:*\n\n`{text}`",
-        "btn_share": "↗️ አጋራ",
-        "btn_youtube": "▶️ YouTube",
-        "btn_google": "🔍 Google",
-        "btn_copy": "📋 ቅዳ",
     },
     "en": {
         "welcome": (
@@ -131,11 +126,6 @@ STRINGS = {
         "error_no_audio": "❌ Please send a voice message or audio file.",
         "error_file_too_large": "❌ File too large ({size}MB). Maximum size is {max}MB.",
         "warning_long_audio": "⚠️ Audio is {duration}s long. For best results, keep it under {max}s.\nProcessing anyway...",
-        "copy_text": "📋 *Copy the text below:*\n\n`{text}`",
-        "btn_share": "↗️ Share",
-        "btn_youtube": "▶️ YouTube",
-        "btn_google": "🔍 Google",
-        "btn_copy": "📋 Copy",
     },
 }
 
@@ -277,38 +267,25 @@ async def handle_language_callback(update: Update, context: ContextTypes.DEFAULT
 
 
 def create_transcription_keyboard(transcription: str, context: ContextTypes.DEFAULT_TYPE) -> InlineKeyboardMarkup:
-    """Create inline keyboard with share, YouTube search, Google search, and copy buttons."""
+    """Create inline keyboard with YouTube, Google, and text buttons."""
     # URL-encode the transcription for searches
     query_text = quote_plus(transcription[:100])  # Limit query length
     youtube_url = f"https://www.youtube.com/results?search_query={query_text}"
     google_url = f"https://www.google.com/search?q={query_text}"
 
-    # Create share text for the switch_inline_query
-    share_text = transcription[:200] if len(transcription) > 200 else transcription
-
-    # Get localized button labels
-    lang = get_user_language(context)
-    strings = STRINGS.get(lang, STRINGS[DEFAULT_LANGUAGE])
-
+    # Clean, minimal buttons with recognizable icons
     keyboard = [
         [
-            # Share button - opens chat selector to share the text
-            InlineKeyboardButton(strings["btn_share"], switch_inline_query=share_text),
-            # Copy button
-            InlineKeyboardButton(strings["btn_copy"], callback_data="copy"),
-        ],
-        [
-            # YouTube search button
-            InlineKeyboardButton(strings["btn_youtube"], url=youtube_url),
-            # Google search button
-            InlineKeyboardButton(strings["btn_google"], url=google_url),
+            InlineKeyboardButton("📝", callback_data="text"),  # Get plain text
+            InlineKeyboardButton("🔍", url=google_url),        # Google search
+            InlineKeyboardButton("🎬", url=youtube_url),       # YouTube search
         ],
     ]
     return InlineKeyboardMarkup(keyboard)
 
 
-async def handle_copy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle the copy button callback - send transcription as plain text for easy copying."""
+async def handle_text_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the text button callback - send transcription as plain text."""
     query = update.callback_query
     await query.answer()
 
@@ -320,11 +297,8 @@ async def handle_copy_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         transcription = original_text
 
-    # Send as a new message in copyable format
-    await query.message.reply_text(
-        get_string("copy_text", context, text=transcription),
-        parse_mode="Markdown"
-    )
+    # Send as plain text - easy to copy or forward
+    await query.message.reply_text(transcription)
 
 
 async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -427,7 +401,7 @@ def main() -> None:
     application.add_handler(CommandHandler("language", language_command))
     application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_audio))
     application.add_handler(CallbackQueryHandler(handle_language_callback, pattern="^lang_"))
-    application.add_handler(CallbackQueryHandler(handle_copy_callback, pattern="^copy$"))
+    application.add_handler(CallbackQueryHandler(handle_text_callback, pattern="^text$"))
 
     # Run the bot in polling mode
     logger.info("Starting bot in polling mode...")
