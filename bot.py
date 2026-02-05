@@ -4,11 +4,11 @@ Telegram Bot for Amharic Speech-to-Text Transcription.
 Receives audio messages and transcribes them using AWS Lambda API.
 """
 
-import asyncio
 import base64
 import logging
 import os
 import random
+import asyncio
 from typing import Optional
 
 import httpx
@@ -204,71 +204,6 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.error(f"Error processing audio: {e}")
 
 
-async def health_check(request):
-    """Health check endpoint for Railway."""
-    from aiohttp import web
-    return web.Response(text="OK", status=200)
-
-
-async def run_webhook(application: Application) -> None:
-    """Run the bot with webhook for production (Railway)."""
-    from aiohttp import web
-
-    port = int(os.getenv("PORT", 8080))
-    webhook_url = os.getenv("RAILWAY_PUBLIC_DOMAIN")
-
-    if not webhook_url:
-        logger.warning("RAILWAY_PUBLIC_DOMAIN not set, using polling mode")
-        await run_polling(application)
-        return
-
-    webhook_url = f"https://{webhook_url}/webhook"
-
-    # Create aiohttp app for health checks
-    aiohttp_app = web.Application()
-    aiohttp_app.router.add_get("/health", health_check)
-
-    # Initialize the application
-    await application.initialize()
-    await application.start()
-
-    # Set up webhook
-    await application.bot.set_webhook(url=webhook_url)
-    logger.info(f"Webhook set to: {webhook_url}")
-
-    # Create webhook handler
-    async def telegram_webhook(request):
-        data = await request.json()
-        update = Update.de_json(data, application.bot)
-        await application.process_update(update)
-        return web.Response(text="OK")
-
-    aiohttp_app.router.add_post("/webhook", telegram_webhook)
-
-    # Run the server
-    runner = web.AppRunner(aiohttp_app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-    logger.info(f"Server started on port {port}")
-
-    # Keep running
-    while True:
-        await asyncio.sleep(3600)
-
-
-async def run_polling(application: Application) -> None:
-    """Run the bot with polling for local development."""
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling(drop_pending_updates=True)
-    logger.info("Bot started in polling mode")
-
-    # Keep running
-    while True:
-        await asyncio.sleep(3600)
-
-
 def main() -> None:
     """Main function to start the bot."""
     if not TELEGRAM_BOT_TOKEN:
@@ -283,13 +218,9 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_audio))
 
-    # Run the bot
-    if os.getenv("RAILWAY_PUBLIC_DOMAIN"):
-        logger.info("Running in webhook mode (Railway)")
-        asyncio.run(run_webhook(application))
-    else:
-        logger.info("Running in polling mode (local)")
-        asyncio.run(run_polling(application))
+    # Run the bot in polling mode
+    logger.info("Starting bot in polling mode...")
+    application.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
