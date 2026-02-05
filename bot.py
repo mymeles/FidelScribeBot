@@ -204,14 +204,25 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.error(f"Error processing audio: {e}")
 
 
+async def post_init(application: Application) -> None:
+    """Delete any existing webhook to ensure clean polling mode."""
+    await application.bot.delete_webhook(drop_pending_updates=True)
+    logger.info("Webhook deleted, ready for polling")
+
+
 def main() -> None:
     """Main function to start the bot."""
     if not TELEGRAM_BOT_TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN environment variable is not set!")
         return
 
-    # Create application
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    # Create application with post_init to clear webhooks
+    application = (
+        Application.builder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .post_init(post_init)
+        .build()
+    )
 
     # Add handlers
     application.add_handler(CommandHandler("start", start_command))
@@ -220,7 +231,7 @@ def main() -> None:
 
     # Run the bot in polling mode
     logger.info("Starting bot in polling mode...")
-    application.run_polling(drop_pending_updates=True)
+    application.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
